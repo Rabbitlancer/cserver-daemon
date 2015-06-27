@@ -7,4 +7,5 @@ function handleRequest(req,res) {
 
 var server = http.createServer(handleRequest);
 
-server.listen(PORT, function (){console.log('Server started')});
+server.listen(PORT, function (){
+	console.log('Server started');});
