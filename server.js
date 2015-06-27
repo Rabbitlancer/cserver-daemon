@@ -8,4 +8,5 @@ function handleRequest(req,res) {
 var server = http.createServer(handleRequest);
 
 server.listen(PORT, function (){
-	console.log('Server started');});
+	console.log('Server started');
+});
