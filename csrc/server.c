@@ -82,9 +82,9 @@ static void send_document(struct evhttp_request *req, void *arg) {
 	if (strstr(decpath,"..")) goto err;
 
 	int page_id = 0;
-	if ((decpath == "/главная") || (decpath == "home") || (decpath == "/"))
+	if (strstr(decpath,"главная") || strstr(decpath,"/home") || (decpath == "/"))
 			page_id = 0;
-	if ((decpath == "/техобслуживание") || (decpath == "to"))
+	if (strstr(decpath,"техобслуживание") || strstr(decpath,"to"))
 			page_id = 1;
 
 	evb = evbuffer_new();
