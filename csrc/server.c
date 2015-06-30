@@ -57,7 +57,7 @@ not_found:
 }
 
 struct evbuffer *construct_document(struct evbuffer *buf, int id) {
-	buf = evbuffer_new();
+	
 
 	return buf;
 }
@@ -81,7 +81,39 @@ static void send_document(struct evhttp_request *req, void *arg) {
 
 	if (strstr(decpath,"..")) goto err;
 
-	construct_document(evb, 1);
+	int page_id = 0;
+	if ((decpath == "/главная") || (decpath == "home") || (decpath == "/"))
+			page_id = 0;
+	if ((decpath == "/техобслуживание") || (decpath == "to"))
+			page_id = 1;
+
+	evb = evbuffer_new();
+	char mode = 0;
+
+	if (page_id>100) mode = 1;
+
+	int act = 0;
+	switch (page_id) {
+		case 0: act = 1; break;
+		case 1: act = 2; break;
+	}
+	char act1[6], act2[6], act3[6], act4[6];
+	strcpy(act1, "");
+	strcpy(act2, "");
+	strcpy(act3, "");
+	strcpy(act4, "");
+	switch (act) {
+		case 1: strcpy(act1, " act"); break;
+		case 2: strcpy(act2, " act"); break;
+		case 3: strcpy(act3, " act"); break;
+		case 4: strcpy(act4, " act"); break;
+	}
+
+	evbuffer_add_printf(evb,"<!DOCTYPE html><html><head><title>Sample page</title><meta charset=\"utf-8\"><link rel=\"stylesheet\" type=\"text/css\" href=\"templates/style.css\"><link rel=\"icon\" href=\"images/favicon.jpg\" sizes=\"16x16\" type=\"image/jpg\"><script type=\"text/javascript\" src=\"//vk.com/js/api/openapi.js?116\"></script></head><body><div id=\"header\"><a href=\"\"><img id=\"mainlogo\" src=\"images/logo-wide.jpg\"></a><div id=\"mainnav\"><a id=\"homebut\" class=\"navbutton%s\" href=\"\"><div class=\"butshade\">Главная</div></a><a id=\"techbut\" class=\"navbutton%s\" href=\"\"><div class=\"butshade\">Техобслуживание и ремонт</div></a><a id=\"rentbut\" class=\"navbutton%s\" href=\"\"><div class=\"butshade\">Аренда автомобилей</div></a><a id=\"actbut\" class=\"navbutton%s\" href=\"\"><div class=\"butshade\">Акции</div></a></div></div><div id=\"main\">",
+		act1, act2, act3, act4);
+
+	evhttp_add_header(evhttp_request_get_output_headers(req),
+		"Content-Type", "text/html");
 
 	evhttp_send_reply(req, 200, "OK", evb);
 	goto done;
