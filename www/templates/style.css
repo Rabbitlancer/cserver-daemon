@@ -97,8 +97,9 @@ a.navbutton:active {
 	background-color: #B00003;
 }
 
-h1 {
-	line-height: -20px;
+h1 h2 {
+	margin-top: 0px;
+	margin-bottom: 0px;
 }
 
 #homebut {
