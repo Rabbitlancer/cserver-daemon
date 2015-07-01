@@ -14,52 +14,25 @@
 #include <event2/util.h>
 #include <event2/keyvalq_struct.h>
 
-//the following lines, including guess_content_type(),
-//were taken from open-source example of libevent
-//http-server.c
+#define TEMPLATE "pagedata/page%d.pdt"
 
-static const struct table_entry {
-	const char *extension;
-	const char *content_type;
-} content_type_table[] = {
-	{ "txt", "text/plain" },
-	{ "c", "text/plain" },
-	{ "h", "text/plain" },
-	{ "html", "text/html" },
-	{ "htm", "text/htm" },
-	{ "css", "text/css" },
-	{ "gif", "image/gif" },
-	{ "jpg", "image/jpeg" },
-	{ "jpeg", "image/jpeg" },
-	{ "png", "image/png" },
-	{ "pdf", "application/pdf" },
-	{ "ps", "application/postsript" },
-	{ NULL, NULL },
-};
-
-/* Try to guess a good content-type for 'path' */
-static const char *
-guess_content_type(const char *path)
-{
-	const char *last_period, *extension;
-	const struct table_entry *ent;
-	last_period = strrchr(path, '.');
-	if (!last_period || strchr(last_period, '/'))
-		goto not_found; /* no exension */
-	extension = last_period + 1;
-	for (ent = &content_type_table[0]; ent->extension; ++ent) {
-		if (!evutil_ascii_strcasecmp(ent->extension, extension))
-			return ent->content_type;
+int detect_pageid(char *str) {
+	int res = 0;
+	if (strstr(str, "страница") || strstr(str, "page")) {
+		goto checkeach;
 	}
+checkeach:
+	if (strstr(str,"главная") || strstr(str,"home") || (str == "/"))
+		res = 0;
+	if (strstr(str,"техобслуживание") || strstr(str,"to"))
+		res = 1;
+	if (strstr(str,"прокат") || strstr(str,"rent"))
+		res = 2;
+	if (strstr(str,"акции") || strstr(str,"acts"))
+		res = 3;
 
-not_found:
-	return "application/misc";
-}
-
-struct evbuffer *construct_document(struct evbuffer *buf, int id) {
-	
-
-	return buf;
+result:
+	return res;
 }
 
 static void send_document(struct evhttp_request *req, void *arg) {
@@ -81,22 +54,38 @@ static void send_document(struct evhttp_request *req, void *arg) {
 
 	if (strstr(decpath,"..")) goto err;
 
-	int page_id = 0;
-	if (strstr(decpath,"главная") || strstr(decpath,"/home") || (decpath == "/"))
-			page_id = 0;
-	if (strstr(decpath,"техобслуживание") || strstr(decpath,"to"))
-			page_id = 1;
+	int page_id = detect_pageid(decpath);
 
 	evb = evbuffer_new();
 	char mode = 0;
 
 	if (page_id>100) mode = 1;
 
+	char *title = (char *)calloc(200, sizeof(char));
+	char *fname = (char *)calloc(200, sizeof(char));
+	char *content = (char *)calloc(200000, sizeof(char));
+
 	int act = 0;
 	switch (page_id) {
 		case 0: act = 1; break;
 		case 1: act = 2; break;
+		case 2: act = 3; break;
+		case 3: act = 4; break;
 	}
+
+	sprintf(fname, TEMPLATE, page_id);
+	if (access(fname, R_OK) == 0) {
+		FILE *pagefile = fopen(fname,"r");
+		fgets(title, 199, pagefile);
+		fgets(content, 199999, pagefile);
+		fclose(pagefile);
+	} else {
+		strcpy(title,"404");
+		strcpy(content,"<h1>Страница не найдена!</h1><p>Вернуться на <a href=\"/\">главную</a>?</p>");
+		act = 1;
+	}
+	free(fname);
+
 	char act1[6], act2[6], act3[6], act4[6];
 	strcpy(act1, "");
 	strcpy(act2, "");
@@ -109,8 +98,11 @@ static void send_document(struct evhttp_request *req, void *arg) {
 		case 4: strcpy(act4, " act"); break;
 	}
 
-	evbuffer_add_printf(evb,"<!DOCTYPE html><html><head><title>Sample page</title><meta charset=\"utf-8\"><link rel=\"stylesheet\" type=\"text/css\" href=\"templates/style.css\"><link rel=\"icon\" href=\"images/favicon.jpg\" sizes=\"16x16\" type=\"image/jpg\"><script type=\"text/javascript\" src=\"//vk.com/js/api/openapi.js?116\"></script></head><body><div id=\"header\"><a href=\"\"><img id=\"mainlogo\" src=\"images/logo-wide.jpg\"></a><div id=\"mainnav\"><a id=\"homebut\" class=\"navbutton%s\" href=\"\"><div class=\"butshade\">Главная</div></a><a id=\"techbut\" class=\"navbutton%s\" href=\"\"><div class=\"butshade\">Техобслуживание и ремонт</div></a><a id=\"rentbut\" class=\"navbutton%s\" href=\"\"><div class=\"butshade\">Аренда автомобилей</div></a><a id=\"actbut\" class=\"navbutton%s\" href=\"\"><div class=\"butshade\">Акции</div></a></div></div><div id=\"main\">",
-		act1, act2, act3, act4);
+	evbuffer_add_printf(evb,"<!DOCTYPE html><html><head><title>%s - АВТОМАМАША</title><meta charset=\"utf-8\"><link rel=\"stylesheet\" type=\"text/css\" href=\"templates/style.css\"><link rel=\"icon\" href=\"images/favicon.jpg\" sizes=\"16x16\" type=\"image/jpg\"><script type=\"text/javascript\" src=\"//vk.com/js/api/openapi.js?116\"></script></head><body><div id=\"header\"><a href=\"/\"><img id=\"mainlogo\" src=\"images/logo-wide.jpg\"></a><div id=\"mainnav\"><a id=\"homebut\" class=\"navbutton%s\" href=\"/\"><div class=\"butshade\">Главная</div></a><a id=\"techbut\" class=\"navbutton%s\" href=\"техобслуживание\"><div class=\"butshade\">Техобслуживание и ремонт</div></a><a id=\"rentbut\" class=\"navbutton%s\" href=\"прокат\"><div class=\"butshade\">Аренда автомобилей</div></a><a id=\"actbut\" class=\"navbutton%s\" href=\"акции\"><div class=\"butshade\">Акции</div></a></div></div><div id=\"main\">%s</div><div id=\"footer\"></div></body></html>",
+		title, act1, act2, act3, act4, content);
+
+	free(title);
+	free(content);
 
 	evhttp_add_header(evhttp_request_get_output_headers(req),
 		"Content-Type", "text/html");
