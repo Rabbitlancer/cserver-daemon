@@ -47,6 +47,22 @@ body {
 	vertical-align: baseline;
 }
 
+a:link {
+	color: white;
+}
+
+a:visited {
+	color: white;
+}
+
+a:hover {
+	color: white;
+}
+
+a:active {
+	color: white;
+}
+
 a.navbutton:link {
 	color: white;
 	text-decoration: none;
@@ -82,7 +98,7 @@ a.navbutton:active {
 }
 
 h1 {
-	color: #C00003;
+	line-height: -20px;
 }
 
 #homebut {
