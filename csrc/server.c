@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -114,6 +115,7 @@ err:
 	evhttp_send_error(req, 404, "Not found");
 
 done:
+	printf("Request served: %s\n", decpath);
 	if (dec) evhttp_uri_free(dec);
 	if (decpath) free(decpath);
 	if (evb) evbuffer_free(evb);
@@ -125,6 +127,18 @@ int main(int argc, char **argv) {
 	struct evhttp_bs *handle;
 
 	unsigned short port = 2304;
+	stdout = fopen("/var/log/server.log","a");
+	fclose(stdin);
+	fclose(stderr);
+
+	int status = daemon(0,1);
+	if (status) {
+		printf("Daemonize failure (%d, %d)\n", status, errno);
+		return 1;
+	}
+
+	printf("Server process successfully started.\n");
+
 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
 		printf("SIGPIPE\n");
 		return 1;
