@@ -1,0 +1,2 @@
+Доступ к администраторству
+<form action="115" method="post">Мастер-пароль: <input type="password" name="master_password"><br><input type="submit" value="Войти"></form>

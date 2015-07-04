@@ -17,23 +17,97 @@
 
 #define TEMPLATE "pagedata/page%d.pdt"
 
-int detect_pageid(char *str) {
-	int res = 0;
-	if (strstr(str, "страница") || strstr(str, "page")) {
-		goto checkeach;
+struct keyvalpair {
+	char *key;
+	char *value;
+	struct keyvalpair *next;
+};
+
+unsigned long hash_fnv(char *input, int len) {
+	unsigned long hash = 14695981039346656037;
+	for (int i = 0; i<len; i++) {
+		hash ^= input[i];
+		hash *= 1099511628211;
 	}
-checkeach:
-	if (strstr(str,"главная") || strstr(str,"home") || (str == "/"))
+
+	return hash;
+}
+
+int detect_pageid(char *str) { //figure out a page_id by URI; return -1 on error
+	int res = 0;
+
+	char *token = (char *)calloc(strlen(str), sizeof(char));
+	strcpy(token, strsep(&str, "/"));
+	strcpy(token, strsep(&str, "/"));
+
+	if (strstr(token, "страница") || strstr(token, "page")) {
+		strcpy(token, strsep(&str, "/"));
+		if (token == NULL) goto error;
+		res = atoi(token);
+		goto result;
+	}
+	else if (strstr(token,"главная") || strstr(token,"home") || (str == NULL))
 		res = 0;
-	if (strstr(str,"техобслуживание") || strstr(str,"to"))
+	else if (strstr(token,"техобслуживание") || strstr(token,"to"))
 		res = 1;
-	if (strstr(str,"прокат") || strstr(str,"rent"))
+	else if (strstr(token,"прокат") || strstr(token,"rent"))
 		res = 2;
-	if (strstr(str,"акции") || strstr(str,"acts"))
+	else if (strstr(token,"акции") || strstr(token,"acts"))
 		res = 3;
+	else goto error;
+	goto result;
+
+error:
+	res = -1;
 
 result:
 	return res;
+}
+
+void parse_post(struct keyvalpair *unit, char *post) {
+	char *postelem = (char *)calloc(2000, sizeof(char));
+	//struct keyvalpair *unit = (struct keyvalpair *)calloc(1, sizeof(struct keyvalpair));
+
+	strcpy(postelem, strsep(&post,"&"));
+	printf("'%s'\n",postelem);
+
+	char *key = (char *)calloc(strlen(postelem), sizeof(char));
+	char *value = (char *)calloc(strlen(postelem), sizeof(char));
+	strcpy(key, strsep(&postelem,"="));
+	strcpy(value, postelem);
+	printf("'%s'/'%s'\n",key, value);
+
+
+	unit->key = (char *)calloc(strlen(key), sizeof(char));
+	strcpy(unit->key, key);
+	unit->value = (char *)calloc(strlen(value), sizeof(char));
+	strcpy(unit->value, value);
+
+	free(key);
+	free(value);
+	free(postelem);
+
+	if (post != "") parse_post(unit->next, post);
+
+	return;
+}
+
+char *postarg_lookup(struct keyvalpair *arg, const char *key) {
+	if (arg->key == key) {
+		return arg->value;
+	} else if (arg->next != NULL) {
+		return postarg_lookup(arg->next, key);
+	} else {
+		return NULL;
+	}
+}
+
+void postarg_free(struct keyvalpair *unit) {
+	if (unit->next != NULL) postarg_free(unit->next);
+	free(unit->key);
+	free(unit->value);
+	free(unit);
+	return;
 }
 
 static void send_document(struct evhttp_request *req, void *arg) {
@@ -48,25 +122,38 @@ static void send_document(struct evhttp_request *req, void *arg) {
 	}
 
 	const char *path = evhttp_uri_get_path(dec);
-	if (!path) path = "/";
+	if (!path) path = "/"; //always add a slash
 
 	char *decpath = evhttp_uridecode(path, 0, NULL);
 	if (decpath == NULL) goto err;
 
-	if (strstr(decpath,"..")) goto err;
+	if (strstr(decpath,"..")) goto err; //just copied from example
 
 	int page_id = detect_pageid(decpath);
 
 	evb = evbuffer_new();
-	char mode = 0;
 
-	if (page_id>100) mode = 1;
+	if ((page_id>100) && (evhttp_request_get_command(req)==EVHTTP_REQ_POST)) { //enter POST mode
+		char *req_text = (char *)calloc(2000, sizeof(char));
+		evbuffer_copyout(evhttp_request_get_input_buffer(req),req_text,2000); //req_text now contains POST data
+		struct keyvalpair postargs;
+		parse_post(&postargs, req_text); //parse POST data
+		if (page_id == 115) {
+			char *password = (char *)calloc(100, sizeof(char));
+			strcpy(password, postarg_lookup(&postargs, "master_password")); //find password
+			unsigned long passhash = hash_fnv(password, strlen(password));
+			printf("Received password '%s' hashed %d\n",password, passhash);
+			free(password);
+		}
+
+		postarg_free(&postargs);
+	}
 
 	char *title = (char *)calloc(200, sizeof(char));
 	char *fname = (char *)calloc(200, sizeof(char));
 	char *content = (char *)calloc(200000, sizeof(char));
 
-	int act = 0;
+	int act = 0; //checking for active link
 	switch (page_id) {
 		case 0: act = 1; break;
 		case 1: act = 2; break;
@@ -75,19 +162,19 @@ static void send_document(struct evhttp_request *req, void *arg) {
 	}
 
 	sprintf(fname, TEMPLATE, page_id);
-	if (access(fname, R_OK) == 0) {
+	if (access(fname, R_OK) == 0) { //if file exists...
 		FILE *pagefile = fopen(fname,"r");
 		fgets(title, 199, pagefile);
 		fgets(content, 199999, pagefile);
 		fclose(pagefile);
-	} else {
+	} else { //and if it doesn't. -1 automatically goes here
 		strcpy(title,"404");
 		strcpy(content,"<h1>Страница не найдена!</h1><p>Вернуться на <a href=\"/\">главную</a>?</p>");
 		act = 1;
 	}
 	free(fname);
 
-	char act1[6], act2[6], act3[6], act4[6];
+	char act1[6], act2[6], act3[6], act4[6]; //still preparing for active link
 	strcpy(act1, "");
 	strcpy(act2, "");
 	strcpy(act3, "");
@@ -100,7 +187,7 @@ static void send_document(struct evhttp_request *req, void *arg) {
 	}
 
 	evbuffer_add_printf(evb,"<!DOCTYPE html><html><head><title>%s - АВТОМАМАША</title><meta charset=\"utf-8\"><link rel=\"stylesheet\" type=\"text/css\" href=\"templates/style.css\"><link rel=\"icon\" href=\"images/favicon.jpg\" sizes=\"16x16\" type=\"image/jpg\"><script type=\"text/javascript\" src=\"//vk.com/js/api/openapi.js?116\"></script></head><body><div id=\"header\"><a href=\"/\"><img id=\"mainlogo\" src=\"images/logo-wide.jpg\"></a><div id=\"mainnav\"><a id=\"homebut\" class=\"navbutton%s\" href=\"/\"><div class=\"butshade\">Главная</div></a><a id=\"techbut\" class=\"navbutton%s\" href=\"техобслуживание\"><div class=\"butshade\">Техобслуживание и ремонт</div></a><a id=\"rentbut\" class=\"navbutton%s\" href=\"прокат\"><div class=\"butshade\">Аренда автомобилей</div></a><a id=\"actbut\" class=\"navbutton%s\" href=\"акции\"><div class=\"butshade\">Акции</div></a></div></div><div id=\"main\">%s</div><div id=\"footer\"></div></body></html>",
-		title, act1, act2, act3, act4, content);
+		title, act1, act2, act3, act4, content); //construct page
 
 	free(title);
 	free(content);
@@ -115,7 +202,7 @@ err:
 	evhttp_send_error(req, 404, "Not found");
 
 done:
-	printf("Request served: %s\n", decpath);
+	printf("Request served: %d\n", page_id);
 	if (dec) evhttp_uri_free(dec);
 	if (decpath) free(decpath);
 	if (evb) evbuffer_free(evb);
@@ -127,15 +214,15 @@ int main(int argc, char **argv) {
 	struct evhttp_bs *handle;
 
 	unsigned short port = 2304;
-	stdout = fopen("/var/log/server.log","a");
-	fclose(stdin);
+	//stdout = fopen("/var/log/server.log","a");
+	fclose(stdin); //commented for debug
 	fclose(stderr);
 
-	int status = daemon(0,1);
+	/*int status = daemon(0,1);
 	if (status) {
 		printf("Daemonize failure (%d, %d)\n", status, errno);
 		return 1;
-	}
+	}*/ //commented for debug
 
 	printf("Server process successfully started.\n");
 
