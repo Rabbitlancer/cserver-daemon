@@ -219,6 +219,8 @@ static void send_document(struct evhttp_request *req, void *arg) {
 			printf("Current time: %ld\n", checktime);
 			#endif
 
+			if (evhttp_find_header(kv, "Cookie") == NULL) goto err;
+
 			if (!strstr(sidcookie, evhttp_find_header(kv, "Cookie")) || ((checktime-last_session.regtime)>300))
 				goto err;
 		}
