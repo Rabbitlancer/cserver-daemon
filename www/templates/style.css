@@ -150,3 +150,13 @@ td {
 	width: 33%;
 	padding: 10px;
 }
+
+.container {
+	border-top-width: 4px;
+	border-top-color: #B00003;
+}
+
+div.container div {
+	vertical-align: top;
+	display: inline-block;
+}

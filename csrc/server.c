@@ -63,6 +63,8 @@ int detect_pageid(char *str) { //figure out a page_id by URI; return -1 on error
 		res = 2;
 	if (strstr(token,"акции") || strstr(token,"acts"))
 		res = 3;
+	if (strstr(token,"запись") || strstr(token,"signup"))
+		res = 103;
 	}
 	goto result;
 
