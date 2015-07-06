@@ -144,3 +144,7 @@ h1, h2 {
 	background-color: #404040;
 	padding: 24px;
 }
+
+td {
+	vertical-align: top;
+}
