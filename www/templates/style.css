@@ -160,3 +160,12 @@ div.container div {
 	vertical-align: top;
 	display: inline-block;
 }
+
+a.button {
+	background-color: #B00003;
+	display: block;
+	padding: 10px;
+	border-radius: 10px;
+	margin-right: 0px;
+	margin-left: auto;
+}
