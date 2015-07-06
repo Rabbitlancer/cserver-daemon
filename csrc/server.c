@@ -200,6 +200,8 @@ static void send_document(struct evhttp_request *req, void *arg) {
 
 				evhttp_add_header(evhttp_request_get_output_headers(req),
 					"Set-Cookie", cookie);
+				evhttp_add_header(evhttp_request_get_output_headers(req),
+					"Refresh", "0; url=115");
 
 				free(cookie);
 			}
