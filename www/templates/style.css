@@ -166,6 +166,6 @@ a.button {
 	display: block;
 	padding: 10px;
 	border-radius: 10px;
-	margin-right: 0px;
-	margin-left: auto;
+	text-decoration: none;
+	left: 40px;
 }
