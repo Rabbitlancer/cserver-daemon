@@ -148,4 +148,5 @@ h1, h2 {
 td {
 	vertical-align: top;
 	width: 33%;
+	padding: 10px;
 }
