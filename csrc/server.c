@@ -189,12 +189,13 @@ static void send_document(struct evhttp_request *req, void *arg) {
 			time_t checktime;
 			time(&checktime);
 			struct evkayvalq *kv = evhttp_request_get_input_headers(req);
+
 			printf("Session check:\n");
 			printf("Last session ID: %ld\n", last_session.id);
 			printf("Timestamp: %ld\n", last_session.regtime);
 			printf("Received cookie: %s\n",evhttp_find_header(kv, "Cookie"));
 			printf("Current time: %ld\n", checktime);
-			//printf("Session check:\nCurrent session: '%s', timestamp %d\nReceived: '%s', current time %d\n",last_session.id,last_session.regtime,evhttp_find_header(kv, "Cookie"),checktime);
+
 			if (!strstr(sidcookie, evhttp_find_header(kv, "Cookie")) || ((checktime-last_session.regtime)>300))
 				goto err;
 		}
@@ -284,15 +285,15 @@ int main(int argc, char **argv) {
 	struct evhttp_bs *handle;
 
 	unsigned short port = 2304;
-	//stdout = fopen("/var/log/server.log","a");
+	stdout = fopen("/var/log/server.log","a");
 	fclose(stdin); //commented for debug
 	fclose(stderr);
 
-	/*int status = daemon(0,1);
+	int status = daemon(0,1);
 	if (status) {
 		printf("Daemonize failure (%d, %d)\n", status, errno);
 		return 1;
-	}*/ //commented for debug
+	}
 
 	last_session.id = 0;
 	last_session.regtime = 0;
