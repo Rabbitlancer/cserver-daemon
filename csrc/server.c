@@ -54,15 +54,16 @@ int detect_pageid(char *str) { //figure out a page_id by URI; return -1 on error
 		res = atoi(token);
 		goto result;
 	}
-	else if (strstr(token,"главная") || strstr(token,"home") || (str == NULL))
+	else {
+	if (strstr(token,"главная") || strstr(token,"home") || (str == NULL))
 		res = 0;
-	else if (strstr(token,"техобслуживание") || strstr(token,"to"))
+	if (strstr(token,"техобслуживание") || strstr(token,"to"))
 		res = 1;
-	else if (strstr(token,"прокат") || strstr(token,"rent"))
+	if (strstr(token,"прокат") || strstr(token,"rent"))
 		res = 2;
-	else if (strstr(token,"акции") || strstr(token,"acts"))
+	if (strstr(token,"акции") || strstr(token,"acts"))
 		res = 3;
-	else goto error;
+	}
 	goto result;
 
 error:
@@ -78,24 +79,32 @@ void parse_post(struct keyvalpair *unit, char *post) {
 	printf("Parse iteration\n");
 
 	strcpy(postelem, strsep(&post,"&"));
+	#ifdef __DEBUG__
 	printf("'%s'\n",postelem);
+	#endif
 
 	char *key = (char *)calloc(strlen(postelem), sizeof(char));
 	char *value = (char *)calloc(strlen(postelem), sizeof(char));
 	strcpy(key, strsep(&postelem,"="));
 	strcpy(value, postelem);
+	#ifdef __DEBUG__
 	printf("'%s'/'%s'\n",key, value);
+	#endif
 
 
 	unit->key = (char *)calloc(strlen(key), sizeof(char));
 	strcpy(unit->key, key);
 	unit->value = (char *)calloc(strlen(value), sizeof(char));
 	strcpy(unit->value, value);
+	#ifdef __DEBUG__
 	printf("'%s'//'%s'; '%s'\n", unit->key, unit->value, post);
+	#endif
 
 	free(key);
 	free(value);
+	#ifdef __DEBUG__
 	printf("Freed memory\n");
+	#endif
 
 	if (post != NULL) {
 		unit->next = malloc(sizeof(struct keyvalpair));
@@ -104,10 +113,14 @@ void parse_post(struct keyvalpair *unit, char *post) {
 }
 
 void postarg_lookup(struct keyvalpair *arg, char **buffer, const char *key) {
+	#ifdef __DEBUG__
 	printf("Lookup iteration: searching '%s' in %p\n", key, arg);
 	printf("'%s'\n", arg->key);
+	#endif
 	if (strcmp(arg->key, key) == 0) {
+		#ifdef __DEBUG__
 		printf("Key found\n");
+		#endif
 		strcpy(*buffer, arg->value);
 	} else if (arg->next != NULL) {
 		postarg_lookup(arg->next, buffer, key);
@@ -150,14 +163,20 @@ static void send_document(struct evhttp_request *req, void *arg) {
 		evbuffer_copyout(evhttp_request_get_input_buffer(req),req_text,2000); //req_text now contains POST data
 		struct keyvalpair postargs;
 		parse_post(&postargs, req_text); //parse POST data
+		#ifdef __DEBUG__
 		printf("Arguments parsed\n");
+		#endif
 		if (page_id == 115) {
 			char *password = (char *)calloc(100, sizeof(char));
+			#ifdef __DEBUG__
 			printf("'%s' inside first keyvalpair\n", postargs.key);
+			#endif
 			postarg_lookup(&postargs, &password, "master_password"); //find password
 			if (password != NULL) {
 				long passhash = hash_fnv(password);
+				#ifdef __DEBUG__
 				printf("Received password '%s' hashed %ld\n",password, passhash);
+				#endif
 				free(password);
 
 				FILE *pwd = fopen(PWPATH, "r");
@@ -165,9 +184,11 @@ static void send_document(struct evhttp_request *req, void *arg) {
 				fscanf(pwd, "%ld", &actualhash);
 				fclose(pwd);
 
+				#ifdef __DEBUG__
 				printf("Actual hash is '%ld'\n",actualhash);
 				long difference = passhash-actualhash;
 				printf("Difference: %ld\n",difference);
+				#endif
 
 				if (passhash != actualhash) goto err;
 
@@ -190,22 +211,28 @@ static void send_document(struct evhttp_request *req, void *arg) {
 			time(&checktime);
 			struct evkayvalq *kv = evhttp_request_get_input_headers(req);
 
+			#ifdef __DEBUG__
 			printf("Session check:\n");
 			printf("Last session ID: %ld\n", last_session.id);
 			printf("Timestamp: %ld\n", last_session.regtime);
 			printf("Received cookie: %s\n",evhttp_find_header(kv, "Cookie"));
 			printf("Current time: %ld\n", checktime);
+			#endif
 
 			if (!strstr(sidcookie, evhttp_find_header(kv, "Cookie")) || ((checktime-last_session.regtime)>300))
 				goto err;
 		}
 		if (page_id == 140) {
 			char *password = (char *)calloc(100, sizeof(char));
+			#ifdef __DEBUG__
 			printf("'%s' inside first keyvalpair\n", postargs.key);
+			#endif
 			postarg_lookup(&postargs, &password, "master_password"); //find password
 			if (password != NULL) {
 				unsigned long passhash = hash_fnv(password);
+				#ifdef __DEBUG__
 				printf("Received password '%s' hashed %ld\n",password, passhash);
+				#endif
 				free(password);
 
 				FILE *pwf = fopen(PWPATH, "w");
@@ -273,7 +300,9 @@ err:
 	evhttp_send_error(req, 404, "Not Found");
 
 done:
+	#ifdef __DEBUG__
 	printf("Request served: %d\n", page_id);
+	#endif
 	if (dec) evhttp_uri_free(dec);
 	if (decpath) free(decpath);
 	if (evb) evbuffer_free(evb);
@@ -285,15 +314,19 @@ int main(int argc, char **argv) {
 	struct evhttp_bs *handle;
 
 	unsigned short port = 2304;
+	#ifndef __DEBUG__
 	stdout = fopen("/var/log/server.log","a");
-	fclose(stdin); //commented for debug
+	#endif
+	fclose(stdin);
 	fclose(stderr);
 
+	#ifndef __DEBUG__
 	int status = daemon(0,1);
 	if (status) {
 		printf("Daemonize failure (%d, %d)\n", status, errno);
 		return 1;
 	}
+	#endif
 
 	last_session.id = 0;
 	last_session.regtime = 0;
