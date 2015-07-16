@@ -19,6 +19,8 @@
 #define TEMPLATE "pagedata/page%d.pdt"
 #define PWPATH "pagedata/master_password"
 
+#define __DEBUG__
+
 struct keyvalpair {
 	char *key;
 	char *value;
@@ -65,6 +67,8 @@ int detect_pageid(char *str) { //figure out a page_id by URI; return -1 on error
 		res = 3;
 	if (strstr(token,"запись") || strstr(token,"signup"))
 		res = 103;
+	if (strstr(token,"обработано") || strstr(token,"processed"))
+		res = 104;
 	}
 	goto result;
 
@@ -94,10 +98,12 @@ void parse_post(struct keyvalpair *unit, char *post) {
 	#endif
 
 
-	unit->key = (char *)calloc(strlen(key), sizeof(char));
-	strcpy(unit->key, key);
-	unit->value = (char *)calloc(strlen(value), sizeof(char));
-	strcpy(unit->value, value);
+	//unit->key = (char *)calloc(strlen(key), sizeof(char));
+	//strcpy(unit->key, key);
+	unit->key = evhttp_uridecode(key, 0, NULL);
+	//unit->value = (char *)calloc(strlen(value), sizeof(char));
+	//strcpy(unit->value, value);
+	unit->value = evhttp_uridecode(value, 0, NULL);
 	#ifdef __DEBUG__
 	printf("'%s'//'%s'; '%s'\n", unit->key, unit->value, post);
 	#endif
@@ -135,6 +141,26 @@ void postarg_free(struct keyvalpair *unit) {
 	free(unit->value);
 	free(unit);
 	return;
+}
+
+int check_cookie(struct evhttp_request *req) {
+	char *sidcookie = (char *)calloc(200, sizeof(char));
+	sprintf(sidcookie, "Session=%d", last_session.id);
+	time_t checktime;
+	time(&checktime);
+	struct evkayvalq *kv = evhttp_request_get_input_headers(req);
+
+	#ifdef __DEBUG__
+	printf("Session check:\n");
+	printf("Last session ID: %ld\n", last_session.id);
+	printf("Timestamp: %ld\n", last_session.regtime);
+	printf("Received cookie: %s\n",evhttp_find_header(kv, "Cookie"));
+	printf("Current time: %ld\n", checktime);
+	#endif
+
+	if (evhttp_find_header(kv, "Cookie") == NULL) return 0;
+	if (!strstr(sidcookie, evhttp_find_header(kv, "Cookie")) || ((checktime-last_session.regtime)>300)) return 0;
+	else return 1;
 }
 
 static void send_document(struct evhttp_request *req, void *arg) {
@@ -209,24 +235,7 @@ static void send_document(struct evhttp_request *req, void *arg) {
 			}
 		}
 		if (page_id > 110) {
-			char *sidcookie = (char *)calloc(200, sizeof(char));
-			sprintf(sidcookie, "Session=%d", last_session.id);
-			time_t checktime;
-			time(&checktime);
-			struct evkayvalq *kv = evhttp_request_get_input_headers(req);
-
-			#ifdef __DEBUG__
-			printf("Session check:\n");
-			printf("Last session ID: %ld\n", last_session.id);
-			printf("Timestamp: %ld\n", last_session.regtime);
-			printf("Received cookie: %s\n",evhttp_find_header(kv, "Cookie"));
-			printf("Current time: %ld\n", checktime);
-			#endif
-
-			if (evhttp_find_header(kv, "Cookie") == NULL) goto err;
-
-			if (!strstr(sidcookie, evhttp_find_header(kv, "Cookie")) || ((checktime-last_session.regtime)>300))
-				goto err;
+			if (check_cookie(req) == 0) goto err;	
 		}
 		if (page_id == 140) {
 			char *password = (char *)calloc(100, sizeof(char));
@@ -251,6 +260,10 @@ static void send_document(struct evhttp_request *req, void *arg) {
 		}
 
 		//postarg_free(&postargs);
+	}
+
+	if (page_id>200) {
+		if (check_cookie(req) == 0) goto err;
 	}
 
 	char *title = (char *)calloc(200, sizeof(char));
