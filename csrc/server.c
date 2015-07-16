@@ -18,6 +18,7 @@
 
 #define TEMPLATE "pagedata/page%d.pdt"
 #define PWPATH "pagedata/master_password"
+#define REQPATH "pagedata/requests"
 
 #define __DEBUG__
 
@@ -264,6 +265,9 @@ static void send_document(struct evhttp_request *req, void *arg) {
 
 	if (page_id>200) {
 		if (check_cookie(req) == 0) goto err;
+		if (page_id == 201) {
+
+		}
 	}
 
 	char *title = (char *)calloc(200, sizeof(char));
