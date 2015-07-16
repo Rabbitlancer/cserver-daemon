@@ -1,0 +1,5 @@
+#!/bin/sh
+
+rm server
+gcc csrc/server.c -std=c99 -levent -o server
+clear
