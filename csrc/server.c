@@ -19,8 +19,11 @@
 #define TEMPLATE "pagedata/page%d.pdt"
 #define PWPATH "pagedata/master_password"
 #define REQPATH "pagedata/requests"
+#define MAILPATH "pagedata/mail"
 
 #define __DEBUG__
+
+char cachedmail[200];
 
 struct keyvalpair {
 	char *key;
@@ -81,7 +84,7 @@ result:
 }
 
 void parse_post(struct keyvalpair *unit, char *post) {
-	char *postelem = (char *)calloc(2000, sizeof(char));
+	char *postelem = (char *)calloc(20000, sizeof(char));
 	//unit = malloc(sizeof(struct keyvalpair));
 	printf("Parse iteration\n");
 
@@ -164,6 +167,12 @@ int check_cookie(struct evhttp_request *req) {
 	else return 1;
 }
 
+void cache_address() {
+	FILE *fp = fopen(MAILPATH, "r");
+	fscanf(fp, "%s", &cachedmail);
+	fclose(fp);
+}
+
 static void send_document(struct evhttp_request *req, void *arg) {
 	const char *uri = evhttp_request_get_uri(req);
 	struct evhttp_uri *dec = NULL;
@@ -195,6 +204,36 @@ static void send_document(struct evhttp_request *req, void *arg) {
 		#ifdef __DEBUG__
 		printf("Arguments parsed\n");
 		#endif
+		if (page_id == 104) {
+			char *command = (char *)calloc(200000, sizeof(char));
+			char *name = (char *)calloc(500, sizeof(char));
+			char *mail = (char *)calloc(500, sizeof(char));
+			char *car = (char *)calloc(500, sizeof(char));
+			char *vin = (char *)calloc(500, sizeof(char));
+			char *phone = (char *)calloc(500, sizeof(char));
+			char *text = (char *)calloc(50000, sizeof(char));
+
+			postarg_lookup(&postargs, &name, "username");
+			postarg_lookup(&postargs, &mail, "email");
+			postarg_lookup(&postargs, &car, "carname");
+			postarg_lookup(&postargs, &vin, "vin");
+			postarg_lookup(&postargs, &phone, "mobphone");
+			postarg_lookup(&postargs, &text, "request");
+
+			sprintf(command, "echo \"Имя: %s\nE-mail: %s\nАвтомобиль: %s\nVIN: %s\nТелефон: %s\nТекст заявки: %s\n\" | mail -s \"Заявка\" %s", name, mail, car, vin, phone, text, cachedmail);
+			system(command);
+			#ifdef __DEBUG__
+			printf("Send command executed.\n");
+			#endif
+
+			free(text);
+			free(phone);
+			free(vin);
+			free(car);
+			free(mail);
+			free(name);
+			free(command);
+		}
 		if (page_id == 110) {
 			char *password = (char *)calloc(100, sizeof(char));
 			#ifdef __DEBUG__
@@ -254,6 +293,26 @@ static void send_document(struct evhttp_request *req, void *arg) {
 				FILE *pwf = fopen(PWPATH, "w");
 				fprintf(pwf, "%ld", passhash);
 				fclose(pwf);
+
+				evhttp_add_header(evhttp_request_get_output_headers(req),
+					"Refresh", "0; url=101");
+			}
+		}
+		if (page_id == 152) {
+			char *addr = (char *)calloc(100, sizeof(char));
+			#ifdef __DEBUG__
+			printf("'%s' inside first keyvalpair\n", postargs.key);
+			#endif
+			postarg_lookup(&postargs, &addr, "callbackaddress"); //find password
+			if (addr != NULL) {
+				#ifdef __DEBUG__
+				printf("Received address '%s'\n",addr);
+				#endif
+
+				FILE *pwf = fopen(MAILPATH, "w");
+				fprintf(pwf, "%s", addr);
+				fclose(pwf);
+				free(addr);
 
 				evhttp_add_header(evhttp_request_get_output_headers(req),
 					"Refresh", "0; url=101");
@@ -342,6 +401,7 @@ int main(int argc, char **argv) {
 	#endif
 	fclose(stdin);
 	fclose(stderr);
+	cache_address();
 
 	#ifndef __DEBUG__
 	int status = daemon(0,1);

@@ -1,0 +1,2 @@
+Сменить адрес обратной связи
+<form action="152" method="post">Новый адрес: <input type="text" name="callbackaddress"><br><input type="submit" value="Сменить"></form>
