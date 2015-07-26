@@ -47,6 +47,14 @@ long hash_fnv(char *input) {
 	return hash;
 }
 
+void makespaces(char **input) {
+	int len = strlen(*input);
+	for (int i = 0; i<len; i++) {
+		if ((*input)[i] == '+')
+			(*input)[i] = ' ';
+	}
+}
+
 int detect_pageid(char *str) { //figure out a page_id by URI; return -1 on error
 	int res = 0;
 
@@ -86,7 +94,9 @@ result:
 void parse_post(struct keyvalpair *unit, char *post) {
 	char *postelem = (char *)calloc(20000, sizeof(char));
 	//unit = malloc(sizeof(struct keyvalpair));
+	#ifdef __DEBUG__
 	printf("Parse iteration\n");
+	#endif
 
 	strcpy(postelem, strsep(&post,"&"));
 	#ifdef __DEBUG__
@@ -219,6 +229,7 @@ static void send_document(struct evhttp_request *req, void *arg) {
 			postarg_lookup(&postargs, &vin, "vin");
 			postarg_lookup(&postargs, &phone, "mobphone");
 			postarg_lookup(&postargs, &text, "request");
+			makespaces(&text);
 
 			sprintf(command, "echo \"Имя: %s\nE-mail: %s\nАвтомобиль: %s\nVIN: %s\nТелефон: %s\nТекст заявки: %s\n\" | mail -s \"Заявка\" %s", name, mail, car, vin, phone, text, cachedmail);
 			system(command);
