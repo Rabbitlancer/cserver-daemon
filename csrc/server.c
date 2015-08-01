@@ -57,12 +57,18 @@ long hash_fnv(char *input) {
 
 void makespaces(char **input) {
 	int len = strlen(*input);
+	#ifdef __DEBUG__
+	printf("Removing spaces from '%s': ",*input);
+	#endif
 	for (int i = 0; i<len; i++) {
 		if ((*input)[i] == '+')
 			(*input)[i] = ' ';
 		if ((*input)[i] == '\n')
-			(*input)[i] = '<br>';
+			(*input)[i] = '\0';
 	}
+	#ifdef __DEBUG__
+	printf("'%s'\n",*input);
+	#endif
 }
 
 int detect_pageid(char *str) { //figure out a page_id by URI; return -1 on error
@@ -103,7 +109,6 @@ result:
 
 void parse_post(struct keyvalpair *unit, char *post) {
 	char *postelem = (char *)calloc(20000, sizeof(char));
-	//unit = malloc(sizeof(struct keyvalpair));
 	#ifdef __DEBUG__
 	printf("Parse iteration\n");
 	#endif
@@ -121,12 +126,7 @@ void parse_post(struct keyvalpair *unit, char *post) {
 	printf("'%s'/'%s'\n",key, value);
 	#endif
 
-
-	//unit->key = (char *)calloc(strlen(key), sizeof(char));
-	//strcpy(unit->key, key);
 	unit->key = evhttp_uridecode(key, 0, NULL);
-	//unit->value = (char *)calloc(strlen(value), sizeof(char));
-	//strcpy(unit->value, value);
 	unit->value = evhttp_uridecode(value, 0, NULL);
 	#ifdef __DEBUG__
 	printf("'%s'//'%s'; '%s'\n", unit->key, unit->value, post);
@@ -221,6 +221,8 @@ struct actcache *cache_acts_parse(FILE *rf, struct actcache *prev) {
 		result->prev = prev;
 		result->next = NULL;
 
+		makespaces(&title);
+		makespaces(&content);
 		strcpy(result->title, title);
 		strcpy(result->descr, content);
 
@@ -243,6 +245,60 @@ void cache_acts() {
 	}
 
 	fclose(fp);
+}
+
+void stash_acts() {
+	FILE *fp = fopen(ACTPATH, "w");
+	struct actcache *ptr = acts;
+
+	while (ptr != NULL) {
+		fprintf(fp,"%d\n%s\n%s",ptr->id,ptr->title,ptr->descr);
+		ptr = ptr->next;
+		if (ptr != NULL) fputc('\n', fp);
+	}
+
+	#ifdef __DEBUG__
+	printf("Cache stashed\n");
+	#endif
+
+	fclose(fp);
+}
+
+void remove_from_acts(int id) {
+	struct actcache *ptr = acts;
+
+	#ifdef __DEBUG__
+	printf("Removing element %d...",id);
+	#endif
+
+	while (ptr != NULL) {
+		if (ptr->id == id) {
+			if (ptr->prev != NULL) ptr->prev->next = ptr->next;
+			if (ptr->next != NULL) ptr->next->prev = ptr->prev;
+			free(ptr->title);
+			free(ptr->descr);
+			free(ptr);
+		} else ptr=ptr->next;
+	}
+
+	#ifdef __DEBUG__
+	printf(" removed\n");
+	#endif
+
+	return;
+}
+
+void clear_acts() {
+	struct actcache *ptr = acts;
+	struct actcache *pt = NULL;
+	while (ptr != NULL) ptr = ptr->next;
+	while (ptr != NULL) {
+		free(ptr->title);
+		free(ptr->descr);
+		pt = ptr->prev;
+		free(ptr);
+		ptr = pt;
+	}
 }
 
 static void send_document(struct evhttp_request *req, void *arg) {
@@ -350,6 +406,18 @@ static void send_document(struct evhttp_request *req, void *arg) {
 		if (page_id > 110) {
 			if (check_cookie(req) == 0) goto err;	
 		}
+		if (page_id == 122) {
+			char *buf = (char *)calloc(100, sizeof(char));
+			postarg_lookup(&postargs, &buf, "id");
+
+			int remid = atoi(buf);
+			free(buf);
+			remove_from_acts(remid);
+			stash_acts();
+
+			evhttp_add_header(evhttp_request_get_output_headers(req),
+					"Refresh", "0; url=121");
+		}
 		if (page_id == 140) {
 			char *password = (char *)calloc(100, sizeof(char));
 			#ifdef __DEBUG__
@@ -428,6 +496,19 @@ static void send_document(struct evhttp_request *req, void *arg) {
 			strcpy(line,"");
 			ptr = ptr->next;
 		}
+	} else if (page_id == 121) {
+		strcpy(title,"Редактирование акций");
+		struct actcache *ptr = acts;
+		char line[50000];
+		strcpy(content,"");
+		while (ptr != NULL) {
+			sprintf(line, "<h3>%d - %s</h3><p>%s</p>", ptr->id, ptr->title, ptr->descr);
+			strcat(content,line);
+			strcpy(line,"");
+			ptr = ptr->next;
+		}
+		strcat(content,"<form action=\"122\" method=\"post\"><p>Удалить акцию:</p><input type=\"text\" value=\"номер\" name=\"id\"><input type=\"submit\" value=\"Удалить\"></form>");
+		strcat(content,"<form action=\"123\" method=\"post\"><p>Добавить акцию:</p><input type=\"text\" value=\"название\" name=\"title\"><input type=\"text\" value=\"текст\" name=\"descr\"><input type=\"submit\" value=\"Добавить\"><p>ВНИМАНИЕ: не используйте символ переноса строки. Чтобы перенести строку, используйте символы &lt;br&gt;</p></form>");
 	} else {
 		sprintf(fname, TEMPLATE, page_id);
 		if (access(fname, R_OK) == 0) { //if file exists...
