@@ -60,6 +60,8 @@ void makespaces(char **input) {
 	for (int i = 0; i<len; i++) {
 		if ((*input)[i] == '+')
 			(*input)[i] = ' ';
+		if ((*input)[i] == '\n')
+			(*input)[i] = '<br>';
 	}
 }
 
