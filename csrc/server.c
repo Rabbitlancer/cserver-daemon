@@ -204,9 +204,8 @@ struct actcache *cache_acts_parse(FILE *rf, struct actcache *prev) {
 
 	if (fscanf(rf,"%d",&id) != EOF) {
 		struct actcache *result = malloc(sizeof(struct actcache));
-		FILE *dump = fopen("/dev/null", "w"); //apparently, scanf does not progress the line reading in fgets, so we dump a single line into nothing
+		char dump[500];	//apparently, scanf does not progress the line reading in fgets, so we dump a single line into nothing
 		fgets(dump,499,rf);
-		fclose(dump);
 
 		fgets(title,499,rf);
 		fgets(content,49999,rf);
