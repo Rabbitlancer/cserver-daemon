@@ -18,7 +18,7 @@
 
 #define TEMPLATE "pagedata/page%d.pdt"
 #define PWPATH "pagedata/master_password"
-#define REQPATH "pagedata/requests"
+#define ACTPATH "pagedata/acts"
 #define MAILPATH "pagedata/mail"
 
 #define __DEBUG__
@@ -30,6 +30,14 @@ struct keyvalpair {
 	char *value;
 	struct keyvalpair *next;
 };
+
+struct actcache {
+	int id;
+	char *title;
+	char *descr;
+	struct actcache *next;
+	struct actcache *prev;
+} *acts;
 
 struct session {
 	unsigned long id;
@@ -180,6 +188,59 @@ int check_cookie(struct evhttp_request *req) {
 void cache_address() {
 	FILE *fp = fopen(MAILPATH, "r");
 	fscanf(fp, "%s", &cachedmail);
+	#ifdef __DEBUG__
+	printf("Cached address '%s'\n", cachedmail);
+	#endif
+	fclose(fp);
+}
+
+struct actcache *cache_acts_parse(FILE *rf, struct actcache *prev) {
+	int id;
+	char *title = (char *)calloc(500,sizeof(char));
+	char *content = (char *)calloc(50000,sizeof(char));
+	#ifdef __DEBUG__
+	printf("Cache iteration\n");
+	#endif
+
+	if (fscanf(rf,"%d",&id) != EOF) {
+		struct actcache *result = malloc(sizeof(struct actcache));
+		FILE *dump = fopen("/dev/null", "w"); //apparently, scanf does not progress the line reading in fgets, so we dump a single line into nothing
+		fgets(dump,499,rf);
+		fclose(dump);
+
+		fgets(title,499,rf);
+		fgets(content,49999,rf);
+		#ifdef __DEBUG__
+		printf("Read (%d):\n%s\n%s\n----\n", id, title, content);
+		#endif
+
+		result->id = id;
+		result->title = (char *)calloc(strlen(title), sizeof(char));
+		result->descr = (char *)calloc(strlen(content), sizeof(char));
+		result->prev = prev;
+		result->next = NULL;
+
+		strcpy(result->title, title);
+		strcpy(result->descr, content);
+
+		#ifdef __DEBUG__
+		printf("Cached (%d):\n%s\n%s\n----\n", result->id, result->title, result->descr);
+		#endif
+
+		return result;
+	} else return NULL;
+}
+
+void cache_acts() {
+	FILE *fp = fopen(ACTPATH, "r");
+	acts = cache_acts_parse(fp, NULL);
+	struct actcache *ptr = acts;
+
+	while (ptr != NULL) {
+		ptr->next = cache_acts_parse(fp, ptr);
+		ptr = ptr->next;
+	}
+
 	fclose(fp);
 }
 
@@ -352,16 +413,32 @@ static void send_document(struct evhttp_request *req, void *arg) {
 		case 3: act = 4; break;
 	}
 
-	sprintf(fname, TEMPLATE, page_id);
-	if (access(fname, R_OK) == 0) { //if file exists...
-		FILE *pagefile = fopen(fname,"r");
-		fgets(title, 199, pagefile);
-		fgets(content, 199999, pagefile);
-		fclose(pagefile);
-	} else { //and if it doesn't. -1 automatically goes here
-		strcpy(title,"404");
-		strcpy(content,"<h1>Страница не найдена!</h1><p>Вернуться на <a href=\"/\">главную</a>?</p>");
-		act = 1;
+	if (page_id == 2) {
+		strcpy(title,"Автопрокат");
+		strcpy(content,"");
+	} else if (page_id == 3) {
+		strcpy(title,"Акции");
+		struct actcache *ptr = acts;
+		char line[50000];
+		strcpy(content,"");
+		while (ptr != NULL) {
+			sprintf(line, "<h2>%s</h2><p>%s</p>", ptr->title, ptr->descr);
+			strcat(content,line);
+			strcpy(line,"");
+			ptr = ptr->next;
+		}
+	} else {
+		sprintf(fname, TEMPLATE, page_id);
+		if (access(fname, R_OK) == 0) { //if file exists...
+			FILE *pagefile = fopen(fname,"r");
+			fgets(title, 199, pagefile);
+			fgets(content, 199999, pagefile);
+			fclose(pagefile);
+		} else { //and if it doesn't. -1 automatically goes here
+			strcpy(title,"404");
+			strcpy(content,"<h1>Страница не найдена!</h1><p>Вернуться на <a href=\"/\">главную</a>?</p>");
+			act = 1;
+		}
 	}
 	free(fname);
 
@@ -377,7 +454,7 @@ static void send_document(struct evhttp_request *req, void *arg) {
 		case 4: strcpy(act4, " act"); break;
 	}
 
-	evbuffer_add_printf(evb,"<!DOCTYPE html><html><head><title>%s - АВТОМАМАША</title><meta charset=\"utf-8\"><link rel=\"stylesheet\" type=\"text/css\" href=\"templates/style.css\"><link rel=\"icon\" href=\"images/favicon.jpg\" sizes=\"16x16\" type=\"image/jpg\"><script type=\"text/javascript\" src=\"//vk.com/js/api/openapi.js?116\"></script></head><body><div id=\"header\"><a href=\"/\"><img id=\"mainlogo\" src=\"images/logo-wide.jpg\"></a><div id=\"mainnav\"><a id=\"homebut\" class=\"navbutton%s\" href=\"/\"><div class=\"butshade\">Главная</div></a><a id=\"techbut\" class=\"navbutton%s\" href=\"техобслуживание\"><div class=\"butshade\">Техобслуживание и ремонт</div></a><a id=\"rentbut\" class=\"navbutton%s\" href=\"прокат\"><div class=\"butshade\">Автопрокат</div></a><a id=\"actbut\" class=\"navbutton%s\" href=\"акции\"><div class=\"butshade\">Акции</div></a></div></div><div id=\"main\">%s</div><div id=\"footer\"></div></body></html>",
+	evbuffer_add_printf(evb,"<!DOCTYPE html><html><head><title>%s - АВТОМАМАША</title><script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js\"></script><script src=\"templates/pagescripts.js\"></script><meta charset=\"utf-8\"><link rel=\"stylesheet\" type=\"text/css\" href=\"templates/style.css\"><link rel=\"icon\" href=\"images/favicon.jpg\" sizes=\"16x16\" type=\"image/jpg\"><script type=\"text/javascript\" src=\"//vk.com/js/api/openapi.js?116\"></script></head><body><div id=\"header\"><a href=\"/\"><img id=\"mainlogo\" src=\"images/logo-wide.jpg\"></a><div id=\"mainnav\"><a id=\"homebut\" class=\"navbutton%s\" href=\"/\"><div class=\"butshade\">Главная</div></a><a id=\"techbut\" class=\"navbutton%s\" href=\"техобслуживание\"><div class=\"butshade\">Техобслуживание и ремонт</div></a><a id=\"rentbut\" class=\"navbutton%s\" href=\"прокат\"><div class=\"butshade\">Автопрокат</div></a><a id=\"actbut\" class=\"navbutton%s\" href=\"акции\"><div class=\"butshade\">Акции</div></a></div></div><div id=\"main\">%s</div><div id=\"footer\"></div></body></html>",
 		title, act1, act2, act3, act4, content); //construct page
 
 	free(title);
@@ -407,12 +484,15 @@ int main(int argc, char **argv) {
 	struct evhttp_bs *handle;
 
 	unsigned short port = 2304;
+	acts = NULL;
 	#ifndef __DEBUG__
 	stdout = fopen("/var/log/server.log","a");
 	#endif
 	fclose(stdin);
 	fclose(stderr);
+
 	cache_address();
+	cache_acts();
 
 	#ifndef __DEBUG__
 	int status = daemon(0,1);
