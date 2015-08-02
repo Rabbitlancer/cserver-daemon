@@ -413,7 +413,7 @@ static void send_document(struct evhttp_request *req, void *arg) {
 	evb = evbuffer_new();
 
 	if ((page_id>100) && (evhttp_request_get_command(req)==EVHTTP_REQ_POST)) { //enter POST mode
-		char *req_text = (char *)calloc(2000, sizeof(char));
+		char *req_text = (char *)calloc(20000, sizeof(char));
 		evbuffer_copyout(evhttp_request_get_input_buffer(req),req_text,2000); //req_text now contains POST data
 		struct keyvalpair postargs;
 		parse_post(&postargs, req_text); //parse POST data
