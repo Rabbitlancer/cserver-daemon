@@ -286,6 +286,7 @@ void remove_from_acts(int id) {
 			if (ptr->next != NULL) ptr->next->prev = ptr->prev;
 			free(ptr->title);
 			free(ptr->descr);
+			if (ptr == acts) acts = ptr->next;
 			free(ptr);
 			goto done;
 		} else ptr=ptr->next;
