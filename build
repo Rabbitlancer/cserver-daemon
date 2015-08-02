@@ -2,4 +2,11 @@
 
 rm server
 gcc csrc/server.c -std=c99 -levent -o server
-clear
+if [ "$1" != '-v' ]; then
+	clear
+fi
+if [ -e ./server ]; then
+	echo 'Compiled and built.'
+else
+	echo 'There was an error. Try running "build -v"'
+fi

@@ -206,7 +206,7 @@ struct actcache *cache_acts_parse(FILE *rf, struct actcache *prev) {
 
 	if (fscanf(rf,"%d",&id) != EOF) {
 		struct actcache *result = malloc(sizeof(struct actcache));
-		char dump[500];	//apparently, scanf does not progress the line reading in fgets, so we dump a single line into nothing
+		char dump[500];	    //apparently, scanf does not progress the line reading in fgets, so we dump a single line into nothing
 		fgets(dump,499,rf);
 
 		fgets(title,499,rf);
@@ -236,10 +236,16 @@ struct actcache *cache_acts_parse(FILE *rf, struct actcache *prev) {
 
 void cache_acts() {
 	FILE *fp = fopen(ACTPATH, "r");
+	#ifdef __DEBUG__
+	printf("Caching base node\n");
+	#endif
 	acts = cache_acts_parse(fp, NULL);
 	struct actcache *ptr = acts;
 
 	while (ptr != NULL) {
+		#ifdef __DEBUG__
+		printf("Caching...\nAppending to %d\n", ptr->id);
+		#endif
 		ptr->next = cache_acts_parse(fp, ptr);
 		ptr = ptr->next;
 	}
@@ -268,21 +274,26 @@ void remove_from_acts(int id) {
 	struct actcache *ptr = acts;
 
 	#ifdef __DEBUG__
-	printf("Removing element %d...",id);
+	printf("Removing element %d... ",id);
 	#endif
 
 	while (ptr != NULL) {
 		if (ptr->id == id) {
+			#ifdef __DEBUG__
+			printf("found... ");
+			#endif
 			if (ptr->prev != NULL) ptr->prev->next = ptr->next;
 			if (ptr->next != NULL) ptr->next->prev = ptr->prev;
 			free(ptr->title);
 			free(ptr->descr);
 			free(ptr);
+			goto done;
 		} else ptr=ptr->next;
 	}
 
+done:
 	#ifdef __DEBUG__
-	printf(" removed\n");
+	printf("removed\n");
 	#endif
 
 	return;
@@ -299,6 +310,82 @@ void clear_acts() {
 		free(ptr);
 		ptr = pt;
 	}
+}
+
+int getactid() {
+	int id = 0;
+	struct actcache *ptr;
+
+lookupid:
+	ptr = acts;
+	while (ptr!=NULL) {
+		if (ptr->id == id) {
+			id++;
+			goto lookupid;
+		} else ptr = ptr->next;
+	}
+
+	return id;
+}
+
+void insert_acts(int pos, char *title, char *text) {
+	#ifdef __DEBUG__
+	printf("Inserting '%s'/'%s' at position %d\n", title, text, pos);
+	#endif
+	if (acts == NULL) {
+		#ifdef __DEBUG__
+		printf("Creating new base node!\n");
+		#endif
+		acts = malloc(sizeof(struct actcache));
+		acts->id = 0;
+		acts->prev = NULL;
+		acts->next = NULL;
+		acts->title = (char *)calloc(strlen(title),sizeof(char));
+		acts->descr = (char *)calloc(strlen(text),sizeof(char));
+		strcpy(acts->title, title);
+		strcpy(acts->descr, text);
+	} else {
+		struct actcache *ptr = acts;
+		#ifdef __DEBUG__
+		printf("Looking up position...\n");
+		#endif
+		if (pos>0) {
+			while ((ptr->next != NULL) && (pos>0)) {
+				ptr = ptr->next;
+				pos--;
+			}
+			#ifdef __DEBUG__
+			printf("Current pointer at: %d\n", ptr->id);
+			#endif
+			struct actcache *new = malloc(sizeof(struct actcache));
+			new->id = getactid();
+			new->title = (char *)calloc(strlen(title),sizeof(char));
+			new->descr = (char *)calloc(strlen(text),sizeof(char));
+			strcpy(new->title, title);
+			strcpy(new->descr, text);
+			new->prev = ptr;
+			new->next = ptr->next;
+			if (ptr->next != NULL) ptr->next->prev = new;
+			if (ptr != NULL) ptr->next = new;
+		} else {
+			#ifdef __DEBUG__
+			printf("Swapping base node\n");
+			#endif
+			ptr = malloc(sizeof(struct actcache));
+			ptr->id = getactid();
+			ptr->title = (char *)calloc(strlen(title),sizeof(char));
+			ptr->descr = (char *)calloc(strlen(text),sizeof(char));
+			strcpy(ptr->title, title);
+			strcpy(ptr->descr, text);
+			ptr->prev = NULL;
+			ptr->next = acts;
+			acts->prev = ptr;
+			acts = ptr;
+		}
+	}
+	#ifdef __DEBUG__
+	printf("Inserted.\n");
+	#endif
 }
 
 static void send_document(struct evhttp_request *req, void *arg) {
@@ -418,6 +505,26 @@ static void send_document(struct evhttp_request *req, void *arg) {
 			evhttp_add_header(evhttp_request_get_output_headers(req),
 					"Refresh", "0; url=121");
 		}
+		if (page_id == 123) {
+			char *buf = (char *)calloc(100, sizeof(char));
+			postarg_lookup(&postargs, &buf, "pos");
+			int pos = atoi(buf);
+			free(buf);
+
+			char *title = (char *)calloc(500, sizeof(char));
+			char *cont = (char *) calloc(50000, sizeof(char));
+
+			postarg_lookup(&postargs, &title, "title");
+			postarg_lookup(&postargs, &cont, "descr");
+			makespaces(&title);
+			makespaces(&cont);
+
+			insert_acts(pos, title, cont);
+			stash_acts();
+
+			evhttp_add_header(evhttp_request_get_output_headers(req),
+					"Refresh", "0; url=121");
+		}
 		if (page_id == 140) {
 			char *password = (char *)calloc(100, sizeof(char));
 			#ifdef __DEBUG__
@@ -508,7 +615,7 @@ static void send_document(struct evhttp_request *req, void *arg) {
 			ptr = ptr->next;
 		}
 		strcat(content,"<form action=\"122\" method=\"post\"><p>Удалить акцию:</p><input type=\"text\" value=\"номер\" name=\"id\"><input type=\"submit\" value=\"Удалить\"></form>");
-		strcat(content,"<form action=\"123\" method=\"post\"><p>Добавить акцию:</p><input type=\"text\" value=\"название\" name=\"title\"><input type=\"text\" value=\"текст\" name=\"descr\"><input type=\"submit\" value=\"Добавить\"><p>ВНИМАНИЕ: не используйте символ переноса строки. Чтобы перенести строку, используйте символы &lt;br&gt;</p></form>");
+		strcat(content,"<form action=\"123\" method=\"post\"><p>Добавить акцию:</p><input type=\"text\" value=\"порядок\" name=\"pos\"><input type=\"text\" value=\"название\" name=\"title\"><br><textarea name=\"descr\" cols=\"80\" rows=\"10\">текст (не использовать перенос строки!)</textarea><br><input type=\"submit\" value=\"Добавить\"><p>ВНИМАНИЕ: не используйте символ переноса строки. Чтобы перенести строку, используйте символы &lt;br&gt;</p>Порядок указывает, на каком месте будет расположена акция. 0 означает первое место, 1 - второе и т.д.<p></p></form>");
 	} else {
 		sprintf(fname, TEMPLATE, page_id);
 		if (access(fname, R_OK) == 0) { //if file exists...
