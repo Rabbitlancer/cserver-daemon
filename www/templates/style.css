@@ -169,3 +169,71 @@ a.button {
 	text-decoration: none;
 	left: 40px;
 }
+
+#popuper {
+	position: fixed;
+	left: 0px;
+	top: 0px;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(20,20,20,0.5);
+	display: block;
+	z-index: 100;
+}
+
+#popupimg {
+	position: fixed;
+	left: 0%;
+	top: 0%;
+	display: block;
+	max-width: 100%;
+	max-height: 100%;
+}
+
+th {
+	background-color: #B00003;
+}
+
+table, th, td {
+	border: 1px solid #222222;
+	border-collapse: collapse;
+}
+
+.table-car {
+	width: 10%;
+}
+
+.table-opts {
+	width: 10%;
+}
+
+.table-xlp {
+	width: 6%;
+}
+
+.table-lp {
+	width: 6%;
+}
+
+.table-p {
+	width: 6%;
+}
+
+.table-sp {
+	width: 6%;
+}
+
+.table-pledge {
+	width: 6%;
+}
+
+td>p {
+	margin-top: 4px;
+	margin-bottom: 4px;
+	text-align: center;
+}
+
+th {
+	padding-top: 8px;
+	padding-bottom: 8px;
+}

@@ -19,6 +19,7 @@
 #define TEMPLATE "pagedata/page%d.pdt"
 #define PWPATH "pagedata/master_password"
 #define ACTPATH "pagedata/acts"
+#define CARPATH "pagedata/cars"
 #define MAILPATH "pagedata/mail"
 
 #define __DEBUG__
@@ -38,6 +39,20 @@ struct actcache {
 	struct actcache *next;
 	struct actcache *prev;
 } *acts;
+
+struct carcache {
+	int id;
+	int shortprice;
+	int price;
+	int longprice;
+	int xlongprice;
+	int pledge;
+	char *name;
+	char *opts;
+	char *link;
+	struct carcache *next;
+	struct carcache *prev;
+} *cars;
 
 struct session {
 	unsigned long id;
@@ -234,6 +249,54 @@ struct actcache *cache_acts_parse(FILE *rf, struct actcache *prev) {
 	} else return NULL;
 }
 
+struct carcache *cache_cars_parse(FILE *rf, struct carcache *prev) {
+	int id, sprice, price, lprice, xlprice, plg;
+	char *title = (char *)calloc(500,sizeof(char));
+	char *opts = (char *)calloc(500,sizeof(char));
+	char *link = (char *)calloc(500,sizeof(char));
+	#ifdef __DEBUG__
+	printf("Cache iteration\n");
+	#endif
+
+	if (fscanf(rf,"%d %d %d %d %d %d",&id,&sprice,&price,&lprice,&xlprice,&plg) != EOF) {
+		struct carcache *result = malloc(sizeof(struct carcache));
+		char dump[500];	    //apparently, scanf does not progress the line reading in fgets, so we dump a single line into nothing
+		fgets(dump,499,rf);
+
+		fgets(title,499,rf);
+		fgets(opts,499,rf);
+		fgets(link,499,rf);
+		#ifdef __DEBUG__
+		printf("Read (%d):\n%d %d %d %d %d\n%s\n%s\n%s\n----\n", id, sprice, price, lprice, xlprice, plg, title, opts, link);
+		#endif
+
+		result->id = id;
+		result->shortprice = sprice;
+		result->price = price;
+		result->longprice = lprice;
+		result->xlongprice = xlprice;
+		result->pledge = plg;
+		result->name = (char *)calloc(strlen(title), sizeof(char));
+		result->opts = (char *)calloc(strlen(opts), sizeof(char));
+		result->link = (char *)calloc(strlen(link), sizeof(char));
+		result->prev = prev;
+		result->next = NULL;
+
+		makespaces(&title);
+		makespaces(&opts);
+		makespaces(&link);
+		strcpy(result->name, title);
+		strcpy(result->opts, opts);
+		strcpy(result->link, link);
+
+		#ifdef __DEBUG__
+		printf("Cached (%d):\n%d %d %d %d %d\n%s\n%s\n%s\n----\n", result->id, result->shortprice, result->price, result->longprice, result->xlongprice, result->pledge, result->name, result->opts, result->link);
+		#endif
+
+		return result;
+	} else return NULL;
+}
+
 void cache_acts() {
 	FILE *fp = fopen(ACTPATH, "r");
 	#ifdef __DEBUG__
@@ -253,12 +316,48 @@ void cache_acts() {
 	fclose(fp);
 }
 
+void cache_cars() {
+	FILE *fp = fopen(CARPATH, "r");
+	#ifdef __DEBUG__
+	printf("Caching base node\n");
+	#endif
+	cars = cache_cars_parse(fp, NULL);
+	struct carcache *ptr = cars;
+
+	while (ptr != NULL) {
+		#ifdef __DEBUG__
+		printf("Caching...\nAppending to %d\n", ptr->id);
+		#endif
+		ptr->next = cache_cars_parse(fp, ptr);
+		ptr = ptr->next;
+	}
+
+	fclose(fp);
+}
+
 void stash_acts() {
 	FILE *fp = fopen(ACTPATH, "w");
 	struct actcache *ptr = acts;
 
 	while (ptr != NULL) {
 		fprintf(fp,"%d\n%s\n%s",ptr->id,ptr->title,ptr->descr);
+		ptr = ptr->next;
+		if (ptr != NULL) fputc('\n', fp);
+	}
+
+	#ifdef __DEBUG__
+	printf("Cache stashed\n");
+	#endif
+
+	fclose(fp);
+}
+
+void stash_cars() {
+	FILE *fp = fopen(CARPATH, "w");
+	struct carcache *ptr = cars;
+
+	while (ptr != NULL) {
+		fprintf(fp,"%d %d %d %d %d %d\n%s\n%s\n%s",ptr->id, ptr->shortprice, ptr->price, ptr->longprice, ptr->xlongprice, ptr->pledge, ptr->name, ptr->opts, ptr->link);
 		ptr = ptr->next;
 		if (ptr != NULL) fputc('\n', fp);
 	}
@@ -300,7 +399,7 @@ done:
 	return;
 }
 
-void clear_acts() {
+/*void clear_acts() {
 	struct actcache *ptr = acts;
 	struct actcache *pt = NULL;
 	while (ptr != NULL) ptr = ptr->next;
@@ -311,7 +410,7 @@ void clear_acts() {
 		free(ptr);
 		ptr = pt;
 	}
-}
+}*/
 
 int getactid() {
 	int id = 0;
@@ -319,6 +418,22 @@ int getactid() {
 
 lookupid:
 	ptr = acts;
+	while (ptr!=NULL) {
+		if (ptr->id == id) {
+			id++;
+			goto lookupid;
+		} else ptr = ptr->next;
+	}
+
+	return id;
+}
+
+int getcarid() {
+	int id = 0;
+	struct carcache *ptr;
+
+lookupid:
+	ptr = cars;
 	while (ptr!=NULL) {
 		if (ptr->id == id) {
 			id++;
@@ -414,7 +529,7 @@ static void send_document(struct evhttp_request *req, void *arg) {
 
 	if ((page_id>100) && (evhttp_request_get_command(req)==EVHTTP_REQ_POST)) { //enter POST mode
 		char *req_text = (char *)calloc(20000, sizeof(char));
-		evbuffer_copyout(evhttp_request_get_input_buffer(req),req_text,2000); //req_text now contains POST data
+		evbuffer_copyout(evhttp_request_get_input_buffer(req),req_text,20000); //req_text now contains POST data
 		struct keyvalpair postargs;
 		parse_post(&postargs, req_text); //parse POST data
 		#ifdef __DEBUG__
@@ -592,7 +707,16 @@ static void send_document(struct evhttp_request *req, void *arg) {
 
 	if (page_id == 2) {
 		strcpy(title,"Автопрокат");
-		strcpy(content,"");
+		strcpy(content,"<table><tbody><tr><th rowspan=\"2\" class=\"table-car\">Автомобиль</th><th rowspan=\"2\" class=\"table-opts\">Опции</th><th colspan=\"4\">Цена за сутки (руб.)</th><th rowspan=\"2\" class=\"table-pledge\">Залог</th></tr><tr><th class=\"table-xlp\">От 14 дней</th><th class=\"table-lp\">От 7 до 13</th><th class=\"table-p\">От 4 до 6</th><th class=\"table-sp\">До 3 дней</th></tr>");
+		struct carcache *ptr = cars;
+		char line[50000];
+		while (ptr != NULL) {
+			sprintf(line,"<tr><td class=\"table-car\"><img class=\"popimager\" src=\"%s\" width=\"100%%\"><p>%s</p></td><td class=\"table-opts\"><p>%s</p></td><td class=\"table-xlp\"><p>%d</p></td><td class=\"table-lp\"><p>%d</p></td><td class=\"table-p\"><p>%d</p></td><td class=\"table-sp\"><p>%d</p></td><td class=\"table-pledge\"><p>%d</p></td></tr>",ptr->link,ptr->name,ptr->opts,ptr->xlongprice,ptr->longprice,ptr->price,ptr->shortprice,ptr->pledge);
+			strcat(content,line);
+			strcpy(line,"");
+			ptr = ptr->next;
+		}
+		strcat(content,"</tbody></table>");
 	} else if (page_id == 3) {
 		strcpy(title,"Акции");
 		struct actcache *ptr = acts;
@@ -675,6 +799,7 @@ int main(int argc, char **argv) {
 
 	unsigned short port = 2304;
 	acts = NULL;
+	cars = NULL;
 	#ifndef __DEBUG__
 	stdout = fopen("/var/log/server.log","a");
 	#endif
@@ -683,6 +808,7 @@ int main(int argc, char **argv) {
 
 	cache_address();
 	cache_acts();
+	cache_cars();
 
 	#ifndef __DEBUG__
 	int status = daemon(0,1);
