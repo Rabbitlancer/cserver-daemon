@@ -199,6 +199,10 @@ table, th, td {
 	border-collapse: collapse;
 }
 
+td.nobord {
+	border: 0px solid white;
+}
+
 .table-car {
 	width: 10%;
 }
