@@ -199,7 +199,7 @@ table, th, td {
 	border-collapse: collapse;
 }
 
-td.nobord {
+.nobord {
 	border: 0px solid white;
 }
 
