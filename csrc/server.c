@@ -399,18 +399,36 @@ done:
 	return;
 }
 
-/*void clear_acts() {
-	struct actcache *ptr = acts;
-	struct actcache *pt = NULL;
-	while (ptr != NULL) ptr = ptr->next;
+void remove_from_cars(int id) {
+	struct carcache *ptr = cars;
+
+	#ifdef __DEBUG__
+	printf("Removing element %d... ",id);
+	#endif
+
 	while (ptr != NULL) {
-		free(ptr->title);
-		free(ptr->descr);
-		pt = ptr->prev;
-		free(ptr);
-		ptr = pt;
+		if (ptr->id == id) {
+			#ifdef __DEBUG__
+			printf("found... ");
+			#endif
+			if (ptr->prev != NULL) ptr->prev->next = ptr->next;
+			if (ptr->next != NULL) ptr->next->prev = ptr->prev;
+			free(ptr->name);
+			free(ptr->opts);
+			free(ptr->link);
+			if (ptr == cars) cars = ptr->next;
+			free(ptr);
+			goto done;
+		} else ptr=ptr->next;
 	}
-}*/
+
+done:
+	#ifdef __DEBUG__
+	printf("removed\n");
+	#endif
+
+	return;
+}
 
 int getactid() {
 	int id = 0;
@@ -497,6 +515,87 @@ void insert_acts(int pos, char *title, char *text) {
 			ptr->next = acts;
 			acts->prev = ptr;
 			acts = ptr;
+		}
+	}
+	#ifdef __DEBUG__
+	printf("Inserted.\n");
+	#endif
+}
+
+void insert_cars(int pos, char *name, char *opts, char *link, int xlp, int lp, int p, int sp, int plg) {
+	#ifdef __DEBUG__
+	printf("Inserting '%s' at position %d\n", name, pos);
+	#endif
+	if (cars == NULL) {
+		#ifdef __DEBUG__
+		printf("Creating new base node!\n");
+		#endif
+		cars = malloc(sizeof(struct carcache));
+		cars->id = 0;
+		cars->prev = NULL;
+		cars->next = NULL;
+		cars->name = (char *)calloc(strlen(name),sizeof(char));
+		cars->opts = (char *)calloc(strlen(opts),sizeof(char));
+		cars->link = (char *)calloc(strlen(link),sizeof(char));
+		cars->xlongprice = xlp;
+		cars->longprice = lp;
+		cars->price = p;
+		cars->shortprice = sp;
+		cars->pledge = plg;
+		strcpy(cars->name, name);
+		strcpy(cars->opts, opts);
+		strcpy(cars->link, link);
+	} else {
+		struct carcache *ptr = cars;
+		#ifdef __DEBUG__
+		printf("Looking up position...\n");
+		#endif
+		if (pos>0) {
+			while ((ptr->next != NULL) && (pos>0)) {
+				ptr = ptr->next;
+				pos--;
+			}
+			#ifdef __DEBUG__
+			printf("Current pointer at: %d\n", ptr->id);
+			#endif
+			struct carcache *new = malloc(sizeof(struct carcache));
+			new->id = getcarid();
+			new->name = (char *)calloc(strlen(name),sizeof(char));
+			new->opts = (char *)calloc(strlen(opts),sizeof(char));
+			new->link = (char *)calloc(strlen(link),sizeof(char));
+			new->xlongprice = xlp;
+			new->longprice = lp;
+			new->price = p;
+			new->shortprice = sp;
+			new->pledge = plg;
+			strcpy(new->name, name);
+			strcpy(new->opts, opts);
+			strcpy(new->link, link);
+			new->prev = ptr;
+			new->next = ptr->next;
+			if (ptr->next != NULL) ptr->next->prev = new;
+			if (ptr != NULL) ptr->next = new;
+		} else {
+			#ifdef __DEBUG__
+			printf("Swapping base node\n");
+			#endif
+			ptr = malloc(sizeof(struct carcache));
+			ptr->id = getcarid();
+			ptr->name = (char *)calloc(strlen(name),sizeof(char));
+			ptr->opts = (char *)calloc(strlen(opts),sizeof(char));
+			ptr->link = (char *)calloc(strlen(link),sizeof(char));
+			ptr->xlongprice = xlp;
+			ptr->longprice = lp;
+			ptr->price = p;
+			ptr->shortprice = sp;
+			ptr->pledge = plg;
+			strcpy(ptr->name, name);
+			strcpy(ptr->opts, opts);
+			strcpy(ptr->link, link);
+			ptr->prev = NULL;
+			ptr->next = cars;
+			cars->prev = ptr;
+			cars = ptr;
 		}
 	}
 	#ifdef __DEBUG__
@@ -609,6 +708,50 @@ static void send_document(struct evhttp_request *req, void *arg) {
 		if (page_id > 110) {
 			if (check_cookie(req) == 0) goto err;	
 		}
+		if (page_id == 118) {
+			char *buf = (char *)calloc(100, sizeof(char));
+			postarg_lookup(&postargs, &buf, "id");
+
+			int remid = atoi(buf);
+			free(buf);
+			remove_from_cars(remid);
+			stash_cars();
+
+			evhttp_add_header(evhttp_request_get_output_headers(req),
+					"Refresh", "0; url=117");
+		}
+		if (page_id == 119) {
+			char *buf = (char *)calloc(100, sizeof(char));
+			postarg_lookup(&postargs, &buf, "pos");
+			int pos = atoi(buf);
+			postarg_lookup(&postargs, &buf, "xlp");
+			int xlp = atoi(buf);
+			postarg_lookup(&postargs, &buf, "lp");
+			int lp = atoi(buf);
+			postarg_lookup(&postargs, &buf, "p");
+			int p = atoi(buf);
+			postarg_lookup(&postargs, &buf, "sp");
+			int sp = atoi(buf);
+			postarg_lookup(&postargs, &buf, "plg");
+			int plg = atoi(buf);
+			free(buf);
+
+			char *name = (char *)calloc(500, sizeof(char));
+			char *link = (char *)calloc(500, sizeof(char));
+			char *opts = (char *)calloc(500, sizeof(char));
+			postarg_lookup(&postargs, &name, "name");
+			postarg_lookup(&postargs, &link, "link");
+			postarg_lookup(&postargs, &opts, "opts");
+			makespaces(&name);
+			makespaces(&link);
+			makespaces(&opts);
+
+			insert_cars(pos,name,opts,link,xlp,lp,p,sp,plg);
+			stash_cars();
+
+			evhttp_add_header(evhttp_request_get_output_headers(req),
+					"Refresh", "0; url=117");
+		}
 		if (page_id == 122) {
 			char *buf = (char *)calloc(100, sizeof(char));
 			postarg_lookup(&postargs, &buf, "id");
@@ -707,9 +850,12 @@ static void send_document(struct evhttp_request *req, void *arg) {
 
 	if (page_id == 2) {
 		strcpy(title,"Автопрокат");
-		strcpy(content,"<table><tbody><tr><th rowspan=\"2\" class=\"table-car\">Автомобиль</th><th rowspan=\"2\" class=\"table-opts\">Опции</th><th colspan=\"4\">Цена за сутки (руб.)</th><th rowspan=\"2\" class=\"table-pledge\">Залог</th></tr><tr><th class=\"table-xlp\">От 14 дней</th><th class=\"table-lp\">От 7 до 13</th><th class=\"table-p\">От 4 до 6</th><th class=\"table-sp\">До 3 дней</th></tr>");
+		strcpy(content,"<table class=\"cars\"><tbody><tr><th rowspan=\"2\" class=\"table-car\">Автомобиль</th><th rowspan=\"2\" class=\"table-opts\">Опции</th><th colspan=\"4\">Цена за сутки (руб.)</th><th rowspan=\"2\" class=\"table-pledge\">Залог</th></tr><tr><th class=\"table-xlp\">От 14 дней</th><th class=\"table-lp\">От 7 до 13</th><th class=\"table-p\">От 4 до 6</th><th class=\"table-sp\">До 3 дней</th></tr>");
 		struct carcache *ptr = cars;
 		char line[50000];
+		if (ptr == NULL) {
+			strcat(content,"<tr><td colspan=\"7\">На данный момент машины отсутствуют!</td></tr>");
+		}
 		while (ptr != NULL) {
 			sprintf(line,"<tr><td class=\"table-car\"><img class=\"popimager\" src=\"%s\" width=\"100%%\"><p>%s</p></td><td class=\"table-opts\"><p>%s</p></td><td class=\"table-xlp\"><p>%d</p></td><td class=\"table-lp\"><p>%d</p></td><td class=\"table-p\"><p>%d</p></td><td class=\"table-sp\"><p>%d</p></td><td class=\"table-pledge\"><p>%d</p></td></tr>",ptr->link,ptr->name,ptr->opts,ptr->xlongprice,ptr->longprice,ptr->price,ptr->shortprice,ptr->pledge);
 			strcat(content,line);
@@ -741,6 +887,19 @@ static void send_document(struct evhttp_request *req, void *arg) {
 		}
 		strcat(content,"<form action=\"122\" method=\"post\"><p>Удалить акцию:</p><input type=\"text\" value=\"номер\" name=\"id\"><input type=\"submit\" value=\"Удалить\"></form>");
 		strcat(content,"<form action=\"123\" method=\"post\"><p>Добавить акцию:</p><input type=\"text\" value=\"порядок\" name=\"pos\"><input type=\"text\" value=\"название\" name=\"title\"><br><textarea name=\"descr\" cols=\"80\" rows=\"10\">текст (не использовать перенос строки!)</textarea><br><input type=\"submit\" value=\"Добавить\"><p>ВНИМАНИЕ: не используйте символ переноса строки. Чтобы перенести строку, используйте символы &lt;br&gt;</p>Порядок указывает, на каком месте будет расположена акция. 0 означает первое место, 1 - второе и т.д.<p></p></form>");
+	} else if (page_id == 117) {
+		strcpy(title,"Редактирование проката");
+		strcpy(content,"<p>Чтобы добавить фотографию автомобиля:</p><p>- используйте любой хостинг изображений, например, <a href=\"http://tinypic.com\">tinypic.com</a></p><p>- вставьте полученную ссылку в поле &quot;фотография&quot;</p>");
+		struct carcache *ptr = cars;
+		char line[50000];
+		while (ptr != NULL) {
+			sprintf(line,"<h2>%d - %s</h2><img src=\"%s\">",ptr->id,ptr->name,ptr->link);
+			strcat(content,line);
+			strcpy(line,"");
+			ptr = ptr->next;
+		}
+		strcat(content,"<form action=\"118\" method=\"post\"><p>Удалить автомобиль:</p><input type=\"text\" value=\"номер\" name=\"id\"><input type=\"submit\" value=\"Удалить\"></form>");
+		strcat(content,"<form action=\"119\" method=\"post\"><p>Добавить автомобиль:</p><input type=\"text\" value=\"порядок\" name=\"pos\"><input type=\"text\" value=\"название\" name=\"name\"><input type=\"text\" value=\"фотография\" name=\"link\"><input type=\"text\" value=\"опции\" name=\"opts\"><input type=\"text\" value=\"цена за 14+ дней\" name=\"xlp\"><input type=\"text\" value=\"7-14\" name=\"lp\"><input type=\"text\" value=\"3-6\" name=\"p\"><input type=\"text\" value=\"1-3\" name=\"sp\"><input type=\"text\" value=\"залог\" name=\"plg\"><input type=\"submit\" value=\"Добавить\"></form>");
 	} else {
 		sprintf(fname, TEMPLATE, page_id);
 		if (access(fname, R_OK) == 0) { //if file exists...

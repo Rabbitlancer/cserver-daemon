@@ -227,7 +227,7 @@ table, th, td {
 	width: 6%;
 }
 
-td>p {
+table.cars p {
 	margin-top: 4px;
 	margin-bottom: 4px;
 	text-align: center;
