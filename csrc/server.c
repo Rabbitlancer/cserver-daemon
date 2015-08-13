@@ -198,7 +198,7 @@ int check_cookie(struct evhttp_request *req) {
 	#endif
 
 	if (evhttp_find_header(kv, "Cookie") == NULL) return 0;
-	if (!strstr(sidcookie, evhttp_find_header(kv, "Cookie")) || ((checktime-last_session.regtime)>300)) return 0;
+	if (!strstr(evhttp_find_header(kv, "Cookie"), sidcookie) || ((checktime-last_session.regtime)>300)) return 0;
 	else return 1;
 }
 
